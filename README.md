@@ -5,6 +5,8 @@ A skill for automatically generating data dashboards with API layer and visualiz
 输入数据 + 业务规则，自动生成可交互的数据看板网站，一键部署到云端
 
 适合人群
+
+
 产品/运营/分析师/销售：有数据，需要快速出可视化界面给老板或客户看
 
 创业者：需要快速验证数据产品的原型
