@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{PROJECT_NAME}} - 数据看板</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; }
+        
+        /* 主题色变量 - 根据需求修改 */
+        :root {
+            --primary: {{PRIMARY_COLOR}};
+            --primary-light: {{PRIMARY_COLOR_LIGHT}};
+            --primary-dark: {{PRIMARY_COLOR_DARK}};
+        }
+        
+        .header { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; padding: 20px; }
+        .header h1 { font-size: 24px; margin-bottom: 10px; }
+        .header-controls { display: flex; gap: 15px; align-items: center; }
+        
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        
+        /* 统计卡片 */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .stat-card .label { color: #666; font-size: 14px; }
+        .stat-card .value { font-size: 28px; font-weight: bold; color: var(--primary); margin: 5px 0; }
+        .stat-card .sub { font-size: 12px; color: #999; }
+        
+        /* 数据表格 */
+        .table-container { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
+        .table-controls { display: flex; gap: 10px; flex-wrap: wrap; }
+        
+        input[type="text"] { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; width: 200px; }
+        select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; }
+        button { padding: 8px 16px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: var(--primary-dark); }
+        button.secondary { background: #6c757d; }
+        
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; font-weight: 600; cursor: pointer; }
+        th:hover { background: #e9ecef; }
+        
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+        .badge-excellent { background: #d4edda; color: #155724; }
+        .badge-good { background: #fff3cd; color: #856404; }
+        .badge-normal { background: #f8d7da; color: #721c24; }
+        
+        /* 分页 */
+        .pagination { display: flex; justify-content: center; gap: 5px; margin-top: 15px; }
+        .pagination button { min-width: 36px; }
+        .pagination button.active { background: var(--primary-dark); }
+        .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        /* 图表区域 */
+        .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .chart-card { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .chart-card h3 { margin-bottom: 15px; color: #333; }
+        .chart-wrapper { height: 300px; }
+        
+        /* 加载状态 */
+        .loading { text-align: center; padding: 40px; color: #666; }
+        
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .charts-grid { grid-template-columns: 1fr; }
+            .table-header { flex-direction: column; align-items: stretch; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{PROJECT_NAME}}</h1>
+        <div class="header-controls">
+            <span>数据周期：</span>
+            <select id="periodSelect">
+                <option value="current">当前周期</option>
+            </select>
+            <button onclick="exportData()">导出数据</button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <!-- 统计卡片 -->
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="label">数据总量</div>
+                <div class="value" id="statTotal">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">优质数量</div>
+                <div class="value" id="statExcellent">-</div>
+                <div class="sub">占比 <span id="statExcellentPercent">-</span>%</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">良好数量</div>
+                <div class="value" id="statGood">-</div>
+                <div class="sub">占比 <span id="statGoodPercent">-</span>%</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">一般数量</div>
+                <div class="value" id="statNormal">-</div>
+                <div class="sub">占比 <span id="statNormalPercent">-</span>%</div>
+            </div>
+        </div>
+        
+        <!-- 数据表格 -->
+        <div class="table-container">
+            <div class="table-header">
+                <div class="table-controls">
+                    <input type="text" id="searchInput" placeholder="搜索..." onkeyup="handleSearch()">
+                    <select id="levelFilter" onchange="handleFilter()">
+                        <option value="all">全部</option>
+                        <option value="excellent">优质</option>
+                        <option value="good">良好</option>
+                        <option value="normal">一般</option>
+                    </select>
+                    <select id="sortSelect" onchange="handleSort()">
+                        <option value="">默认排序</option>
+                        <!-- 根据实际字段动态生成 -->
+                    </select>
+                </div>
+                <div id="tableInfo">共 - 条数据</div>
+            </div>
+            <table>
+                <thead>
+                    <tr id="tableHeader">
+                        <!-- 根据实际字段动态生成 -->
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr><td colspan="10" class="loading">加载中...</td></tr>
+                </tbody>
+            </table>
+            <div class="pagination" id="pagination"></div>
+        </div>
+        
+        <!-- 图表区域 -->
+        <div class="charts-grid">
+            <div class="chart-card">
+                <h3>趋势图</h3>
+                <div class="chart-wrapper">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h3>分布图</h3>
+                <div class="chart-wrapper">
+                    <canvas id="distributionChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== 配置 ====================
+        const API_BASE = window.location.hostname === 'localhost' 
+            ? 'http://localhost:3000/api' 
+            : '/api';
+        
+        // 当前状态
+        let currentPage = 1;
+        let currentFilter = 'all';
+        let currentSearch = '';
+        let currentSort = '';
+        let currentPeriod = 'current';
+        
+        // 图表实例
+        let trendChart = null;
+        let distributionChart = null;
+        
+        // ==================== API 请求 ====================
+        async function fetchAPI(endpoint) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`);
+                return await response.json();
+            } catch (error) {
+                console.error('API Error:', error);
+                throw error;
+            }
+        }
+        
+        // ==================== 数据加载 ====================
+        async function loadData() {
+            try {
+                const params = new URLSearchParams({
+                    page: currentPage,
+                    level: currentFilter,
+                    search: currentSearch,
+                    sort: currentSort,
+                    period: currentPeriod
+                });
+                
+                const res = await fetchAPI(`/items?${params}`);
+                if (res.success) {
+                    renderTable(res.data.list);
+                    renderPagination(res.data.pagination);
+                    renderStats(res.data.stats);
+                }
+            } catch (error) {
+                document.getElementById('tableBody').innerHTML = 
+                    '<tr><td colspan="10">数据加载失败，请检查API服务</td></tr>';
+            }
+        }
+        
+        // ==================== 渲染函数 ====================
+        function renderTable(items) {
+            if (!items || items.length === 0) {
+                document.getElementById('tableBody').innerHTML = 
+                    '<tr><td colspan="10">暂无数据</td></tr>';
+                return;
+            }
+            
+            // 根据实际字段渲染表格
+            const html = items.map(item => `
+                <tr>
+                    <td>${item.name || item.id}</td>
+                    <td>${item.value || '-'}</td>
+                    <td><span class="badge badge-${item.level}">${getLevelText(item.level)}</span></td>
+                </tr>
+            `).join('');
+            
+            document.getElementById('tableBody').innerHTML = html;
+        }
+        
+        function renderPagination(pagination) {
+            const { page, totalPages } = pagination;
+            let html = '';
+            
+            html += `<button ${page === 1 ? 'disabled' : ''} onclick="goToPage(1)">首页</button>`;
+            html += `<button ${page === 1 ? 'disabled' : ''} onclick="goToPage(${page - 1})">上一页</button>`;
+            
+            for (let i = Math.max(1, page - 2); i <= Math.min(totalPages, page + 2); i++) {
+                html += `<button class="${i === page ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+            }
+            
+            html += `<button ${page === totalPages ? 'disabled' : ''} onclick="goToPage(${page + 1})">下一页</button>`;
+            html += `<button ${page === totalPages ? 'disabled' : ''} onclick="goToPage(${totalPages})">末页</button>`;
+            
+            document.getElementById('pagination').innerHTML = html;
+            document.getElementById('tableInfo').textContent = `第 ${page}/${totalPages} 页，共 ${pagination.total} 条`;
+        }
+        
+        function renderStats(stats) {
+            document.getElementById('statTotal').textContent = stats.total;
+            document.getElementById('statExcellent').textContent = stats.byLevel.excellent;
+            document.getElementById('statExcellentPercent').textContent = stats.percentages.excellent;
+            document.getElementById('statGood').textContent = stats.byLevel.good;
+            document.getElementById('statGoodPercent').textContent = stats.percentages.good;
+            document.getElementById('statNormal').textContent = stats.byLevel.normal;
+            document.getElementById('statNormalPercent').textContent = stats.percentages.normal;
+        }
+        
+        function getLevelText(level) {
+            const map = { excellent: '优质', good: '良好', normal: '一般' };
+            return map[level] || level;
+        }
+        
+        // ==================== 图表 ====================
+        async function initCharts() {
+            // 趋势图
+            const trendCtx = document.getElementById('trendChart').getContext('2d');
+            trendChart = new Chart(trendCtx, {
+                type: 'line',
+                data: {
+                    labels: ['1月', '2月', '3月', '4月'],
+                    datasets: [{
+                        label: '数量',
+                        data: [0, 0, 0, 0],
+                        borderColor: 'var(--primary)',
+                        backgroundColor: 'rgba(var(--primary), 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+            
+            // 分布图
+            const distCtx = document.getElementById('distributionChart').getContext('2d');
+            distributionChart = new Chart(distCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['优质', '良好', '一般'],
+                    datasets: [{
+                        data: [0, 0, 0],
+                        backgroundColor: ['#28a745', '#ffc107', '#dc3545']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+        
+        async function updateCharts() {
+            const stats = await fetchAPI('/statistics');
+            if (stats.success) {
+                distributionChart.data.datasets[0].data = [
+                    stats.data.byLevel.excellent,
+                    stats.data.byLevel.good,
+                    stats.data.byLevel.normal
+                ];
+                distributionChart.update();
+            }
+        }
+        
+        // ==================== 交互处理 ====================
+        function goToPage(page) {
+            currentPage = page;
+            loadData();
+        }
+        
+        function handleSearch() {
+            currentSearch = document.getElementById('searchInput').value;
+            currentPage = 1;
+            loadData();
+        }
+        
+        function handleFilter() {
+            currentFilter = document.getElementById('levelFilter').value;
+            currentPage = 1;
+            loadData();
+        }
+        
+        function handleSort() {
+            currentSort = document.getElementById('sortSelect').value;
+            currentPage = 1;
+            loadData();
+        }
+        
+        function exportData() {
+            window.open(`${API_BASE}/export?level=${currentFilter}&search=${currentSearch}`, '_blank');
+        }
+        
+        // ==================== 初始化 ====================
+        document.addEventListener('DOMContentLoaded', async function() {
+            await loadData();
+            await initCharts();
+            await updateCharts();
+        });
+    </script>
+</body>
+</html>
