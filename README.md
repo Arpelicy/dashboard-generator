@@ -1,17 +1,22 @@
 # Dashboard Generator Skill
 
 A skill for automatically generating data dashboards with API layer and visualization.
+
 输入数据 + 业务规则，自动生成可交互的数据看板网站，一键部署到云端
 
 适合人群
 产品/运营/分析师/销售：有数据，需要快速出可视化界面给老板或客户看
+
 创业者：需要快速验证数据产品的原型
+
 学生：毕业设计、课程作业需要数据可视化展示
 
 典型场景
 
 "我有5000条供应商数据，想做个评级看板"
+
 "我想做一个销售数据大屏，支持按月份筛选"
+
 "这堆Excel数据想变成网页给别人看"
 
 ## Features
